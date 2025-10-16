@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Main Page</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      background: #34495e;
+      color: #fff;
+      padding: 15px 20px;
+      display: flex;
+      align-items: center;
+    }
+    .header button {
+      background: #2c3e50;
+      border: none;
+      color: #fff;
+      padding: 10px 15px;
+      cursor: pointer;
+      border-radius: 4px;
+      margin-right: 15px;
+    }
+    .header button:hover {
+      background: #1a252f;
+    }
+
+    /* Layout */
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 200px;
+      background: #2c3e50;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      padding-top: 20px;
+      transition: width 0.3s ease;
+      overflow: hidden;
+    }
+    .sidebar.hidden {
+      width: 0;
+      padding: 0; /* collapse padding when hidden */
+    }
+    .sidebar a {
+      padding: 15px;
+      text-decoration: none;
+      color: white;
+      display: block;
+      transition: background 0.3s;
+      white-space: nowrap;
+    }
+    .sidebar a:hover {
+      background: #34495e;
+    }
+
+    /* Content */
+    .content {
+      flex: 1;
+      padding: 20px;
+      transition: flex 0.3s ease;
+    }
+    iframe {
+      width: 100%;
+      height: 90vh;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <button onclick="toggleSidebar()">☰</button>
+    <h2>Main Dashboard</h2>
+  </div>
+
+  <div class="main">
+    <!-- Sidebar -->
+    <div id="sidebar" class="sidebar">
+      <a href="{{ url_for('customer_list') }}" target="formFrame">Customer List</a>
+      <a href="{{ url_for('service_complaint') }}" target="formFrame">Service Complaint</a>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      <iframe name="formFrame" src="{{ url_for('customer_list') }}"></iframe>
+    </div>
+  </div>
+
+  <script>
+    function toggleSidebar() {
+      document.getElementById("sidebar").classList.toggle("hidden");
+    }
+  </script>
+</body>
+</html>

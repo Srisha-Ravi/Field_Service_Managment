@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Complaint List & Entry Form</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Bootstrap & DataTables CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+
+  <style>
+    body { padding: 30px; background-color: #f8f9fa; }
+    h2 { margin-bottom: 30px; }
+    .form-section { padding: 10px 0; }
+    .section-title { background-color: #e9ecef; padding: 10px; font-weight: bold; border-radius: 5px; margin-bottom: 15px; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2 class="text-center">Service Complaints</h2>
+  <button class="btn btn-success mb-3" id="addBtn">+ Add Complaint</button>
+
+  <!-- Complaint Table -->
+  <table id="complaintTable" class="table table-striped">
+    <thead>
+      <tr>
+        <th>Complaint no</th>
+        <th>Company</th>
+        <th>Site</th>
+        <th>Machine No.</th>
+        <th>Complaint Date</th>
+        <th>Complaint</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<!-- Modal Form -->
+<div class="modal fade" id="complaintModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form id="complaintForm">
+        <div class="modal-header">
+          <h5 class="modal-title">Complaint Entry</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body">
+          <input type="hidden" id="rowIndex">
+
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label" for="service_id">Complaint No</label>
+              <input type="text" class="form-control" id="service_id" name="service_id" readonly>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="complaint_date">Complaint Date</label>
+              <input type="date" class="form-control" id="complaint_date" name="complaint_date" required>
+            </div>
+          </div>
+
+          <div class="row g-3">  
+            <div class="col-md-4">
+              <label class="form-label" for="company">Company</label>
+              <select class="form-select" id="company" name="company" required>
+                <option value="">Select Company</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="site">Site</label>
+              <select class="form-select" id="site" name="site" required></select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="machine_no">Machine No.</label>
+              <select class="form-select" id="machine_no" name="machine_no" required></select>
+            </div>
+          </div>  
+
+          <div class="col-12">
+            <label class="form-label" for="customer_complaint">Customer Complaint</label>
+            <textarea class="form-control" id="customer_complaint" name="customer_complaint" rows="2" required></textarea>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+<!-- ... head and body code remains unchanged ... -->
+
+<script>
+  const modal = new bootstrap.Modal(document.getElementById("complaintModal"));
+const form = document.getElementById("complaintForm");
+let editingRow = null;
+
+
+ function populateSelect(select, options, selectedValue = null) {
+    select.innerHTML = '<option value="">Select</option>';
+    options.forEach(opt => {
+        const option = document.createElement("option");
+        option.value = String(opt.value).trim();
+        option.textContent = opt.text;
+        if (selectedValue !== null && String(selectedValue).trim() === String(opt.value).trim()) {
+            option.selected = true;   // ✅ force match
+        }
+        select.appendChild(option);
+    });
+}
+
+function formatDateToDMY(isoDate) {
+    const [year, month, day] = isoDate.split("-");
+    return `${day}-${month}-${year}`;
+  }
+
+function formatDateToInput(dmyDate) {
+    const [day, month, year] = dmyDate.split("-");
+    return `${year}-${month}-${day}`;
+}
+
+// DataTable
+const dataTable = $('#complaintTable').DataTable({
+  columns: [
+    { data: 'complaintid' },
+    { data: 'customername' },
+    { data: 'sitename' },
+    { data: 'machineno' },
+    { data: 'complaintdate', 
+      render: d => d ? formatDateToDMY(d) : "" },
+    { data: 'customercomplaint' },
+    { data: 'status' },
+    { data: null, orderable: false, render: (data, type, row) => {
+        if (row.status === "Closed") {
+          return `<button class="btn btn-sm btn-info viewBtn">View</button>`;
+        } else {
+          return `
+            <button class="btn btn-sm btn-primary editBtn">Edit</button>
+            <button class="btn btn-sm btn-danger deleteBtn">Delete</button>
+            <button class="btn btn-sm btn-warning closeBtn">Close</button>
+          `;
+        }
+      }
+    }
+  ]
+});
+
+// Load companies
+async function loadCompanies() {
+    const res = await fetch("/companies");
+    const companies = await res.json();
+    populateSelect(form.company, companies.map(c => ({value: c.customerid, text: c.customername})));
+}
+
+// Load complaints
+async function loadComplaints() {
+    const res = await fetch("/api/complaints");
+    const complaints = await res.json();
+    complaints.forEach(c => {
+        dataTable.row.add({
+            complaintid: c.complaintid,
+            customerid: c.customerid,
+            customername: c.customername,
+            siteid: c.siteid,
+            sitename: c.sitename,
+            machineid: c.machineid,
+            machineno: c.machineno,
+            complaintdate: c.complaintdate, //keep raw
+            customercomplaint: c.customercomplaint,
+            status: c.status
+        });
+    });
+    dataTable.draw();
+}
+
+// When company changes → load sites
+form.company.addEventListener('change', async () => {
+    const customerId = form.company.value;
+    if (!customerId) return populateSelect(form.site, []);
+    const res = await fetch(`/companies/${customerId}/sites`);
+    const sites = await res.json();
+    populateSelect(form.site, sites.map(s => ({value: s.siteid, text: s.sitename})));
+    populateSelect(form.machine_no, []);
+});
+
+// When site changes → load machines
+form.site.addEventListener('change', async () => {
+    const siteId = form.site.value;
+    if (!siteId) return populateSelect(form.machine_no, []);
+    const res = await fetch(`/sites/${siteId}/machines`);
+    const machines = await res.json();
+    populateSelect(form.machine_no, machines.map(m => ({value: m.machineid, text: m.machineno})));
+});
+
+// Add Complaint button
+document.getElementById("addBtn").addEventListener("click", () => {
+    editingRow = null;
+    form.reset();
+    populateSelect(form.site, []);
+    populateSelect(form.machine_no, []);
+    const today = new Date().toISOString().split("T")[0];
+    form.complaint_date.max = today;
+    form.complaint_date.value = today;
+    modal.show();
+});
+
+// Form submission
+form.addEventListener("submit", async e => {
+    e.preventDefault();
+
+    const payload = {
+        complaintdate: form.complaint_date.value,
+        customerid: form.company.value,
+        siteid: form.site.value,
+        machineid: form.machine_no.value,
+        customercomplaint: form.customer_complaint.value,
+        contactperson: "",
+        contactno: "",
+        inspection: "",
+        repairdone: "",
+        status: editingRow ? editingRow.data().status : "Open"
+    };
+
+    // Validate IDs before sending
+    if (!payload.customerid || !payload.siteid || !payload.machineid) {
+        alert("❌ Customer, Site, and Machine must be selected!");
+        return;
+    }
+
+    try {
+        const url = editingRow ? `/api/complaints/${form.service_id.value}` : "/api/complaints";
+        const method = editingRow ? "PUT" : "POST";
+
+        const res = await fetch(url, {
+            method,
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+
+        const rowData = {
+            complaintid: editingRow ? form.service_id.value : data.complaintid,
+            customerid: payload.customerid,
+            customername: form.company.options[form.company.selectedIndex].text,
+            siteid: payload.siteid,
+            sitename: form.site.options[form.site.selectedIndex].text,
+            machineid: payload.machineid,
+            machineno: form.machine_no.options[form.machine_no.selectedIndex].text,
+            complaintdate: formatDateToDMY(form.complaint_date.value),
+            customercomplaint: form.customer_complaint.value,
+            status: "Open"
+        };
+
+        if (editingRow) dataTable.row(editingRow).data(rowData).draw();
+        else dataTable.row.add(rowData).draw();
+
+        modal.hide();
+        editingRow = null;
+        alert("✅ Complaint saved successfully!");
+    } catch (err) {
+        console.error(err);
+        alert("❌ Failed to save complaint: " + err.message);
+    }
+});
+
+// Edit row button;
+
+$('#complaintTable tbody').on('click', '.editBtn', async function () {
+    editingRow = dataTable.row($(this).parents('tr'));
+    const data = editingRow.data();
+
+    form.reset();
+
+    // 1. Companies
+    const resCompanies = await fetch("/companies");
+    const companies = await resCompanies.json();
+    populateSelect(
+        form.company,
+        companies.map(c => ({ value: c.customerid, text: c.customername })),
+        data.customerid    // ✅ preselect company
+    );
+
+    // 2. Sites
+    if (data.customerid) {
+        const resSites = await fetch(`/companies/${data.customerid}/sites`);
+        const sites = await resSites.json();
+        populateSelect(
+            form.site,
+            sites.map(s => ({ value: s.siteid, text: s.sitename })),
+            data.siteid      // ✅ preselect site
+        );
+    }
+
+    // 3. Machines
+    if (data.siteid) {
+        const resMachines = await fetch(`/sites/${data.siteid}/machines`);
+        const machines = await resMachines.json();
+        populateSelect(
+            form.machine_no,
+            machines.map(m => ({ value: m.machineid, text: m.machineno })),
+            data.machineid   // ✅ preselect machine
+        );
+    }
+
+    // 4. Other fields
+    form.complaint_date.value = formatDateToInput(data.complaintdate);
+    form.customer_complaint.value = data.customercomplaint;
+    form.service_id.value = data.complaintid;
+
+    console.log("Edit data:", data);
+console.log("Assigning company:", data.customerid);
+console.log("Assigning site:", data.siteid);
+console.log("Assigning machine:", data.machineid);
+
+
+    modal.show();
+});
+
+
+
+
+// Delete row button
+$('#complaintTable tbody').on('click', '.deleteBtn', async function () {
+    const row = dataTable.row($(this).parents('tr'));
+    const id = row.data().complaintid;
+    if (!confirm("Are you sure to delete this complaint?")) return;
+
+    try {
+        const res = await fetch(`/api/complaints/${id}`, {method: "DELETE"});
+        if (!res.ok) throw new Error(await res.text());
+        row.remove().draw();
+        alert("✅ Complaint deleted successfully!");
+    } catch (err) {
+        alert("❌ Failed to delete: " + err.message);
+    }
+});
+
+// On page load
+document.addEventListener("DOMContentLoaded", () => {
+    loadCompanies();
+    loadComplaints();
+
+    const today = new Date().toISOString().split("T")[0];
+    form.complaint_date.max = today;
+    form.complaint_date.value = today;
+});
+
+</script>
+
+<!-- Close Complaint Modal -->
+<div class="modal fade" id="closeComplaintModal" tabindex="-1">
+  <div class="modal-dialog modal-xl"> <!-- xl because it's a big form -->
+    <div class="modal-content">
+      <form id="closeComplaintForm">
+        
+        <div class="modal-header">
+          <h5 class="modal-title">Service Complaint & Closure Form</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body">
+
+          <!-- Complaint Received Details -->
+          <div class="form-section">
+            <div class="section-title">Complaint Received Details</div>
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label">Complaint ID</label>
+                <input type="text" class="form-control" id="close_complaintId" name="close_complaintId" readonly>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Complaint Date</label>
+                <input type="date" class="form-control" id="close_complaint_date" name="close_complaint_date" readonly>
+              </div>
+            </div>
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label">Company</label>
+                <input type="text" class="form-control" id="close_company" name="close_company" disabled>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Site</label>
+                <input type="text" class="form-control" id="close_site" name="close_site" disabled>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Machine No.</label>
+                <input type="text" class="form-control" id="close_machine" name="close_machine" disabled>
+              </div>
+            </div> 
+              <div class="col-12">
+                <label class="form-label">Customer Complaint</label>
+                <textarea class="form-control" id="close_customer_complaint" name="close_customer_complaint" rows="2" disabled></textarea>
+              </div>
+            </div>
+  
+
+          <!-- Service Engineer Report -->
+          <div class="form-section">
+            <div class="section-title">Service Engineer Report</div>
+            <div class="col-md-6">
+              <label class="form-label">Engineer Name</label>
+              <select class="form-select" id="engineer_name" name="engineer_name">
+                <option value="Raghunathan R">Raghunathan R</option>
+                <option value="Ravi Prakash">Ravi Prakash</option>
+                <option value="Rabi Narayan">Rabi Narayan</option>
+                <option value="Sudheer Charles">Sudheer Charles</option>
+  
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Inspection</label>
+              <textarea class="form-control" id="close_inspection" name="close_inspection" rows="2"></textarea>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Repair Carried Out</label>
+              <textarea class="form-control" id="close_repairdone" name="close_repairdone" rows="2"></textarea>
+            </div>
+
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label">Closure Mode</label>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="closuremode" value="Onsite" checked>
+                  <label class="form-check-label">Onsite</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="closuremode" value="Online">
+                  <label class="form-check-label">Online</label>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Close Date</label>
+                <input type="date" class="form-control" id="close_date" name="close_date">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Closed in Days</label>
+                <input type="number" class="form-control bg-light" id="closed_days" name="closed_days" readonly>
+              </div>
+            </div>
+
+            <div class="row g-3 mt-3">
+              <div class="col-md-6">
+                <label class="form-label">Contact Person</label>
+                <input type="text" class="form-control" id="close_contactperson" name="close_contactperson">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Contact No.</label>
+                <input type="text" class="form-control" id="close_contactno" name="close_contactno">
+              </div>
+            </div>
+          </div>
+
+                      <!-- Site Status Fields -->
+            <div class="row g-3 mt-3">
+                <div class="col-md-4">
+                    <label class="form-label d-block">Instructor Available?</label>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="instructor" id="close_instructor" value="Yes" checked>
+                        <label class="form-check-label">Yes</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="instructor" id="close_instructor" value="No">
+                        <label class="form-check-label">No</label>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label d-block">A/c Working?</label>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="ac" id="close_ac" value="Yes" checked>
+                        <label class="form-check-label">Yes</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="ac" id="close_ac" value="No">
+                        <label class="form-check-label">No</label>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label d-block">UPS Working?</label>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="ups" id="close_ups" value="Yes" checked>
+                        <label class="form-check-label">Yes</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="ups" id="close_ups" value="No">
+                        <label class="form-check-label">No</label>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-3 mt-3">
+                <div class="col-md-4">
+                    <label class="form-label d-block">Main Power Coming?</label>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="mainpower" id="close_mainpower" value="Yes" checked>
+                        <label class="form-check-label">Yes</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="mainpower" id="close_mainpower" value="No">
+                        <label class="form-check-label">No</label>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label d-block">Cleanliness?</label>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="cleanliness" id="close_cleanliness" value="Yes" checked>
+                        <label class="form-check-label">Yes</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="cleanliness" id="close_cleanliness" value="No">
+                        <label class="form-check-label">No</label>
+                    </div>
+                </div>
+            </div>
+
+          <!-- Parts Replaced -->
+          <div class="form-section">
+            <div class="section-title">Parts Replaced</div>
+                <button type="button" id="addRowBtn" class="btn btn-primary">Add Row</button>
+            <div class="table-responsive">
+              <table class="table table-bordered text-center" id="partsReplacedTable">
+                <thead class="table-light">
+                  <tr>
+                    <th>Component</th>
+                    <th>Part Name</th>
+                    <th>Part No.</th>
+                    <th>Qty.</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+        </div><!-- modal-body -->
+
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary">Submit Closure</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script> 
+
+// Restrict Close Date to today or earlier
+const closeDateInput = document.getElementById("close_date");
+const today = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
+closeDateInput.setAttribute("max", today);
+
+  
+// Close Button
+$('#complaintTable tbody').on('click', '.closeBtn', function () {
+    const row = dataTable.row($(this).parents('tr'));
+    const data = row.data();
+    const complaintId = data.complaintid;
+
+    // Fetch full complaint details from backend
+    fetch(`/api/complaints/${complaintId}`)
+        .then(res => {
+            if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
+            return res.json();
+        })
+        .then(fullData => {
+            console.log("Complaint API Response:", fullData);
+
+            // Fill hidden complaintId
+            document.getElementById("close_complaintId").value = fullData.complaintid || "";
+
+            // Fill readonly complaint details from DB
+            document.getElementById("close_complaint_date").value = fullData.complaintdate || "";
+            document.getElementById("close_company").value = fullData.customername || "";
+            document.getElementById("close_site").value = fullData.sitename || "";
+            if (document.getElementById("close_machine")) {
+                 document.getElementById("close_machine").value = fullData.machineno || "";
+               }
+
+            document.getElementById("close_customer_complaint").value = fullData.customercomplaint || "";
+
+            // Fill closure fields
+            ["close_inspection","close_repairdone","close_closuremode","close_contactperson","close_contactno"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = fullData[id.replace("close_", "")] || "";
+});
+
+
+            // Prefill engineer radio groups (Y/N) safely
+            ["close_instructor", "close_ac", "close_ups", "close_mainpower", "close_cleanliness"].forEach(name => {
+    const radios = document.querySelectorAll(`input[name='${name}']`);
+    if (radios.length > 0) {
+        const value = fullData[name] || "";
+        radios.forEach(r => r.checked = (r.value === value));
+    }
+});
+
+
+            // Prefill parts table if exists
+            const partsTableBody = document.querySelector("#partsReplacedTable tbody");
+            partsTableBody.innerHTML = ""; // clear previous rows
+            if (fullData.parts && fullData.parts.length > 0) {
+                fullData.parts.forEach(part => {
+                    const row = document.createElement("tr");
+                    row.innerHTML = `
+    <td>
+      <select class="form-select" name="part_component[]">
+        ${componentOptions.map(c => `<option value="${c}" ${c===part.component ? "selected":""}>${c}</option>`).join('')}
+      </select>
+    </td>
+    <td><input type="text" class="form-control" name="partname[]" value="${part.partname || ''}"></td>
+    <td><input type="text" class="form-control" name="part_no[]" value="${part.partno || ''}"></td>
+    <td><input type="number" class="form-control" name="qty[]" value="${part.quantity || 1}" min="1"></td>
+    <td><button type="button" class="btn btn-danger btn-sm removePartRow">Remove</button></td>
+`;
+
+                    partsTableBody.appendChild(row);
+                });
+            }
+
+            // Show modal
+            const closeModal = new bootstrap.Modal(document.getElementById("closeComplaintModal"));
+            closeModal.show();
+
+            // Store row reference to update later if needed
+            $('#closeComplaintForm').data('rowRef', row);
+        })
+        .catch(err => {
+            console.error("Error fetching complaint:", err);
+            alert("Failed to fetch complaint details. Check console for details.");
+        });
+});
+
+</script>
+
+<script> 
+  window.onload = function () {
+        const complaintDateInput = document.getElementById("close_complaint_date");
+        const closeDateInput = document.getElementById("close_date");
+        const closedDaysInput = document.getElementById("closed_days");
+
+        if (complaintDateInput && closeDateInput && closedDaysInput) {
+            closeDateInput.addEventListener("change", function () {
+                const complaintDate = new Date(complaintDateInput.value);
+                const closeDate = new Date(closeDateInput.value);
+
+                if (!isNaN(complaintDate) && !isNaN(closeDate)) {
+                    if (closeDate < complaintDate) {
+                        alert("Close Date cannot be earlier than Complaint Date.");
+                        closeDateInput.value = "";
+                        closedDaysInput.value = "";
+                    } else {
+                        const diffTime = closeDate - complaintDate;
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        closedDaysInput.value = diffDays;
+                    }
+                }
+            });
+        }
+    };
+</script>
+
+<script>
+
+    // Submit Close Complaint Form
+document.getElementById("closeComplaintForm").addEventListener("submit", async function(e) {
+  e.preventDefault();
+
+  const complaintId = document.getElementById("close_complaintId").value;
+
+  const closureModeInput = document.querySelector("input[name='closuremode']:checked");
+  
+  // Build payload with all fields
+  const payload = {
+    inspection: document.getElementById("close_inspection").value,
+    repairdone: document.getElementById("close_repairdone").value,
+    closuremode: document.querySelector("input[name='closuremode']:checked")?.value || null,
+    contactperson: document.getElementById("close_contactperson").value,
+    contactno: document.getElementById("close_contactno").value,
+
+    // ✅ Radio fields (Yes/No mapped to Y/N)
+    instructor: getRadioValue("instructor"),
+    ac: getRadioValue("ac"),
+    ups: getRadioValue("ups"),
+    mainpower: getRadioValue("mainpower"),
+    cleanliness: getRadioValue("cleanliness"),
+    parts: []
+  };
+
+  // Collect parts
+  document.querySelectorAll("#partsReplacedTable tbody tr").forEach(row => {
+    payload.parts.push({
+      component: row.querySelector("select").value,
+      partname: row.querySelector("input[name='partname[]']").value,
+      partno: row.querySelector("input[name='part_no[]']").value,
+      quantity: row.querySelector("input[name='qty[]']").value
+    });
+  });
+
+
+  try {
+    const response = await fetch(`/api/complaints/${complaintId}/close`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) throw new Error(await response.text());
+    const result = await response.json();
+    alert(result.message);
+
+    // Update DataTable row to Closed
+    const row = $('#closeComplaintForm').data('rowRef');
+    if (row) {
+      const rowData = row.data();
+      rowData.status = "Closed";
+      row.data(rowData).draw();
+    }
+
+    // Hide modal
+    const closeModalEl = document.getElementById("closeComplaintModal");
+    const modalInstance = bootstrap.Modal.getInstance(closeModalEl);
+    modalInstance.hide();
+
+  } catch (err) {
+    console.error(err);
+    alert("❌ Failed to close complaint: " + err.message);
+  }
+});
+
+function getRadioValue(name) {
+    const el = document.querySelector(`input[name='${name}']:checked`);
+    if (!el) return null;
+    return el.value === "Yes" ? "Y" : "N";
+}
+
+
+
+</script>
+
+<script>
+// List of components from Service Report
+const componentOptions = [
+    "Steering", "Gear", "Accelerator", "Brake", "Clutch", "Handbrake", "Computer",
+    "Monitor", "Projector", "Splitter", "Joystick", "Software"
+];
+
+// Create dropdown options dynamically
+function createComponentDropdown() {
+    let options = '<option value="">Select Component</option>';
+    componentOptions.forEach(comp => {
+        options += `<option value="${comp}">${comp}</option>`;
+    });
+    return `<select class="form-select" name="part_component[]">${options}</select>`;
+}
+
+// Add new part row
+document.getElementById("addRowBtn").addEventListener("click", function () {
+    const tableBody = document.querySelector("#partsReplacedTable tbody");
+
+    const newRow = document.createElement("tr");
+    newRow.innerHTML = `
+        <td>${createComponentDropdown()}</td>
+        <td><input type="text" class="form-control" name="partname[]"></td>
+        <td><input type="text" class="form-control" name="part_no[]"></td>
+        <td><input type="number" class="form-control" name="qty[]" min="1" value="1"></td>
+        <td><button type="button" class="btn btn-danger btn-sm removePartRow">Remove</button></td>
+    `;
+
+    tableBody.appendChild(newRow);
+});
+
+
+// Remove row
+document.querySelector("#partsReplacedTable tbody").addEventListener("click", function (e) {
+    if (e.target && e.target.classList.contains("removePartRow")) {
+        e.target.closest("tr").remove();
+    }
+});
+</script>
+
+  <style>
+    #viewComplaintModal body,
+#viewComplaintModal {
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+}
+
+#viewComplaintModal table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 15px;
+}
+
+#viewComplaintModal table, 
+#viewComplaintModal th, 
+#viewComplaintModal td {
+  border: 1px solid #000;
+  padding: 6px;
+  vertical-align: top;
+}
+
+#viewComplaintModal th {
+  background-color: #f8f9fa;
+  text-align: center;
+}
+
+#viewComplaintModal .section-title {
+  text-align: center;
+  font-weight: bold;
+  background: #f1f1f1;
+}
+
+  @media print {
+    /* Ensure logo is visible in print */
+    .modal-header img {
+      display: inline-block !important;
+      max-height: 50px;
+    }
+
+    /* Keep header background light for printing */
+    .modal-header.bg-info {
+      background-color: #e0f3ff !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+  </style>
+
+  <!-- Header -->
+<div class="modal fade" id="viewComplaintModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl"> <!-- xl because it’s a detailed report -->
+    <!-- Close button -->
+  <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button> 
+
+    <div class="modal-content">
+      <form id="complaintReportForm">
+      
+        <div class="modal-body">
+          <table class="table table-bordered">
+            <tr>
+              <!-- Logo -->
+              <td><img src="/static/img/logo.png" alt="Company Logo" style="height:100px; width:auto; margin-right:10px;"></td>
+              <!-- Title -->
+              <td><h1 class="modal-title mb-0">SERVICE REPORT</h1></td>
+            </tr>        
+            <tr>
+              <td>
+                <strong>Customer Name & Address:</strong><br> <span id="view_customername"></span><br>
+                <span id="view_addr1"></span><br>
+                <span id="view_addr2"></span><br>
+                <span id="view_city_state_pincode"></span><br><br>
+                <strong>Phone:</strong> <span id="view_phone"></span><br>
+                <strong>Email:</strong> <span id="view_email"></span>
+              </td>            
+              <td>
+                  <strong>Simulator Details</strong><br>
+                  <strong>Machine No:</strong> <span id="view_machineno"></span><br>
+                  <strong>Make:</strong> <span id="view_make"></span><br>
+                  <strong>Model:</strong> <span id="view_model"></span><br>
+                  <strong>Type:</strong> <span id="view_type"></span>
+              </td>
+              <td>
+              <strong>Complaint No:</strong> <span id="view_complaintid"></span><br>
+              <strong>Complaint Date:</strong> <span id="view_complaintdate"></span><br><br>
+              <strong>Close Date:</strong> <span id="view_closedate"></span><br>
+              <strong>Closure Mode:</strong> <span id="view_closuremode"></span><br><br>
+              <strong>Engineer Attended:</strong> <span id="view_engineername"></span><br>
+              <strong>Customer Contact Person:</strong> <span id="view_contactperson"></span>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Complaint Description -->
+          <table class="table table-bordered">
+            <tr>
+              <td>
+                  <strong>Complaint:</strong><br> <span id="view_customercomplaint"></span><br>
+              </td>
+            </tr>          
+          <!-- Inspection -->          
+            <tr>
+              <td>
+                 <strong>Inspection:</strong><br> <span id="view_inspection"></span><br>
+              </td>
+            </tr>
+          <!-- Service Carried Out -->          
+            <tr>
+              <td>
+                  <strong>Repair Done:</strong><br> <span id="view_repairdone"></span><br>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Environment Checklist -->
+          <table class="table table-bordered">
+            <tr>
+              <td colspan="5" class="table-secondary text-center"><strong>Environment Checklist</strong></td>
+            </tr>
+            <tr>
+              <td>
+                  <strong>Instructor:</strong> <span id="view_instructor"></span>
+              </td>
+              <td>
+                  <strong>A/C:</strong> <span id="view_ac"></span>
+              </td>
+              <td>
+                  <strong>UPS:</strong> <span id="view_ups"></span>
+              </td>
+              <td>
+                  <strong>Main Power:</strong> <span id="view_mainpower"></span>
+              </td>
+              <td>
+                  <strong>Cleanliness:</strong> <span id="view_cleanliness"></span>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Parts Replaced -->
+          <table class="table table-bordered text-center">
+            <tr>
+              <td colspan="4" class="table-secondary"><strong>Parts Replaced</strong></td>
+            </tr>
+            <tr>
+              <th>Component</th>
+              <th>Part Name</th>
+              <th>Part No</th>
+              <th>Quantity</th>
+            </tr>
+            <tbody id="viewPartsTable">
+              <tr>
+                <td colspan="4">No parts replaced</td>
+              </tr>
+            </tbody>                
+          </table>
+
+          <!-- Notes -->
+          <p><strong>NOTE:</strong> This is a computer generated report, no need of signature.</p>
+           <!-- Footer -->
+            <p style="font-size: 12px; text-align:center; margin-top:30px;">
+              Plot No: 1-11-110/98, Flat No: 202 Second Floor, Maruti Arcade, Shamlal Building, Begumpet, Hyderabad – 500 016, Telangana, India<br>
+               ☎: +91 7288872555 | 🌐 www.lewovtech.com | ✉ support@lewovtech.com
+            </p>
+
+        </div><!-- modal-body -->
+        
+  <!-- Print Button -->
+  <div class="no-print text-center mt-3">
+    <button onclick="printModal()" class="btn btn-primary">Print / Save as PDF</button>
+    <a href="mailto:receiver@example.com?subject=Complaint Details&body=Please find attached complaint PDF (download from system)." 
+   class="btn btn-primary">
+   Email Complaint</a>
+
+
+  </div>
+
+</div>
+
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  function setRadio(name, value) {
+  const radios = document.querySelectorAll(`input[name='${name}']`);
+  radios.forEach(r => {
+    if ((value === "Y" && r.value === "Yes") || (value === "N" && r.value === "No")) {
+      r.checked = true;
+    }
+  });
+}
+
+function getRadioValue(name) {
+    const val = document.querySelector(`input[name='${name}']:checked`)?.value; 
+    return val === "Yes" ? "Y" : "N";
+}
+
+  // View Button
+$('#complaintTable tbody').on('click', '.viewBtn', function () {
+  const row = dataTable.row($(this).parents('tr'));
+  const data = row.data();
+  const complaintId = data.complaintid;
+  fetch(`/api/complaints/${complaintId}`)
+    .then(res => {
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`);
+      }
+      return res.json();
+    })
+    .then(fullData => {
+      console.log("Complaint API Response:", fullData);
+
+      // Fill modal fields
+      document.getElementById("view_complaintid").textContent = fullData.complaintid;
+      document.getElementById("view_complaintdate").textContent = formatDateToDMY(fullData.complaintdate) || "";
+      document.getElementById("view_customername").textContent = fullData.customername;
+      document.getElementById("view_addr1").textContent = fullData.addr1;
+      document.getElementById("view_addr2").textContent = fullData.addr2;
+      document.getElementById("view_city_state_pincode").textContent = fullData.city + ", " + fullData.state+" - "+ fullData.pincode;
+      document.getElementById("view_phone").textContent = fullData.phone;
+      document.getElementById("view_email").textContent = fullData.email;
+      document.getElementById("view_machineno").textContent = fullData.machineno || "-";
+      document.getElementById("view_customercomplaint").textContent = fullData.customercomplaint;
+
+      document.getElementById("view_make").textContent = fullData.make || "-";
+      document.getElementById("view_model").textContent = fullData.model || "-";
+      document.getElementById("view_type").textContent = fullData.machinetype || "-";
+
+      document.getElementById("view_inspection").textContent = fullData.inspection || "-";
+      document.getElementById("view_repairdone").textContent = fullData.repairdone || "-";
+      document.getElementById("view_engineername").textContent = fullData.engineername || "-";
+      document.getElementById("view_contactperson").textContent = fullData.contactperson || "-";
+      document.getElementById("view_closuremode").textContent = fullData.closuremode || "-";
+      document.getElementById("view_closedate").textContent = formatDateToDMY(fullData.closedate) || "";
+
+      document.getElementById("view_instructor").textContent = ynToText(fullData.instructor);
+      document.getElementById("view_ac").textContent = ynToText(fullData.ac);
+      document.getElementById("view_ups").textContent = ynToText(fullData.ups);
+      document.getElementById("view_mainpower").textContent = ynToText(fullData.mainpower);
+      document.getElementById("view_cleanliness").textContent = ynToText(fullData.cleanliness);
+
+
+      // Fill parts replaced table
+      const tbody = document.getElementById("viewPartsTable");
+tbody.innerHTML = "";
+if (fullData.parts && fullData.parts.length > 0) {
+  fullData.parts.forEach(p => {
+    const row = `<tr>
+      <td>${p.component}</td>
+      <td>${p.partname}</td>
+      <td>${p.partno}</td>
+      <td>${p.quantity}</td>
+    </tr>`;
+    tbody.insertAdjacentHTML("beforeend", row);
+  });
+} else {
+  tbody.innerHTML = `<tr><td colspan="4">No parts replaced</td></tr>`;
+}
+
+
+      // Show modal
+      const viewModal = new bootstrap.Modal(document.getElementById("viewComplaintModal"));
+      viewModal.show();
+    })
+    .catch(err => {
+      console.error("Error fetching complaint:", err);
+      alert("Failed to fetch complaint details: " + err.message);
+    });
+});
+
+function ynToText(value) {
+  if (value === "Y") return "Yes";
+  if (value === "N") return "No";
+  return "-"; // for NULL or unexpected
+}
+
+
+</script>
+
+<script>
+function printModal() {
+  const modal = document.getElementById('viewComplaintModal');
+  if (!modal) return;
+
+  // ✅ Open new print window
+  const printWindow = window.open('', '', 'width=800,height=600');
+
+  // Clone the WHOLE modal-content (with header + footer)
+  const clone = modal.querySelector('.modal-content').cloneNode(true);
+
+  // ✅ Only convert inputs/textareas inside the modal-body
+  clone.querySelectorAll('.modal-body input, .modal-body textarea, .modal-body select')
+    .forEach(el => {
+      let text = "";
+      if (el.type === "radio" || el.type === "checkbox") {
+        if (el.checked) text = el.value;
+      } else {
+        text = el.value || el.textContent || "";
+      }
+      const span = document.createElement("div");
+      span.textContent = text;
+      span.className = "p-1 border-bottom";
+      el.replaceWith(span);
+    });
+
+  
+  printWindow.document.write(`
+    <html>
+    <head>
+      <title>Complaint Report</title>
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+      <style>
+        body { font-family: Arial, sans-serif; font-size: 12px; margin: 20px; }
+        .modal-content { border: none; box-shadow: none; }
+        h5, h6 { margin: 4px 0; font-weight: bold; }
+        .border-bottom { border-bottom: 1px solid #ccc; }
+        @page { size: A4; margin: 20mm; }
+        /* Hide print button and close button only */
+        .no-print, .btn-close, .btn { display: none !important; }
+      </style>
+    </head>
+    <body>
+      ${clone.outerHTML}
+    </body>
+    </html>
+  `);
+
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+  //printWindow.close();
+}
+
+
+</script>
+
+<script>
+document.getElementById("emailBtn").addEventListener("click", async () => {
+    const complaintId = document.getElementById("view_complaintid").innerText;
+
+    const response = await fetch("/send_email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: complaintId })
+    });
+
+    const result = await response.json();
+    alert(result.message); // shows "Email sent successfully" or error
+});
+</script>
+
+<!-- <script>
+  function printModal() {
+  const modal = document.getElementById('viewComplaintModal');
+  if (!modal) return;
+
+  // Clone modal content
+  const clone = modal.querySelector('.modal-content').cloneNode(true);
+
+  // Remove header/footer
+  clone.querySelector('.modal-header')?.remove();
+  clone.querySelector('.modal-footer')?.remove();
+
+  // Replace inputs with plain text for clean printing
+  clone.querySelectorAll('input, textarea, select').forEach(el => {
+    let text = "";
+    if (el.type === "radio" || el.type === "checkbox") {
+      if (el.checked) text = el.value;
+    } else {
+      text = el.value || el.textContent || "";
+    }
+    const span = document.createElement("div");
+    span.textContent = text;
+    span.className = "p-1 border-bottom";
+    el.replaceWith(span);
+  });
+
+  // Open print window
+  const printWindow = window.open('', '', 'width=800,height=600');
+  printWindow.document.write(`
+    <html>
+    <head>
+      <title>Complaint Report</title>
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+      <style>
+        body { font-family: Arial, sans-serif; font-size: 10px; margin: 10px; }
+        .modal-content { border: none; box-shadow: none; }
+        h5, h6 { margin: 4px 0; font-weight: bold; }
+        .border-bottom { border-bottom: 1px solid #ccc; }
+        @page { size: A4; margin: 5mm; }
+        .no-print, .btn { display: none !important; }
+      </style>
+    </head>
+    <body>
+      ${clone.outerHTML}
+    </body>
+    </html>
+  `);
+
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+  printWindow.close();
+}
+
+</script> -->
+</body>
+</html>
