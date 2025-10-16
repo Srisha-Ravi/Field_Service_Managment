@@ -31,7 +31,6 @@ def get_db_connection():
     print("New connection opened.")
     return db_connection
 
-
 # ------------------- API -------------------
 # ------------------- Create new customer -------------------
 @app.route("/customers", methods=["POST"])
@@ -95,6 +94,7 @@ def create_customer():
     finally:
         cursor.close()
         conn.close()
+        
 # ------------------- Update existing customer -------------------
 @app.route("/customers/<int:customer_id>", methods=["PUT"])
 def update_customer(customer_id):
@@ -254,7 +254,6 @@ def get_customer(customer_id):
         conn.close()
 
  #--------to get all customer list-----------
-
 @app.route("/customers", methods=["GET"])
 def list_customers():
     conn = get_db_connection()
@@ -274,9 +273,7 @@ def list_customers():
     
     return jsonify(customers)
        
-
 # ------------------- Delete customer -------------------
-
 @app.route("/customers/<int:id>", methods=["DELETE"])
 def delete_customer(id):
     conn = get_db_connection()
@@ -324,9 +321,7 @@ def inactive_customer(id):
     conn.close()
     return jsonify({"message": "Customer inactivated successfully"})
 
-
 # ------------------- Complaints API -------------------
-
 # List all complaints
 @app.route("/api/complaints", methods=["GET"])
 def list_complaints():
@@ -365,7 +360,6 @@ def list_complaints():
     print(complaints)
     return jsonify(complaints)
 
-
 # Create new complaint
 @app.route("/api/complaints", methods=["POST"])
 def create_complaint():
@@ -393,7 +387,6 @@ def create_complaint():
     cursor.close()
     conn.close()
     return jsonify({"message": "Complaint saved", "complaintid": complaint_id})
-
 
 # Update complaint
 @app.route("/api/complaints/<int:id>", methods=["PUT"])
@@ -424,7 +417,6 @@ def update_complaint(id):
     conn.close()
     return jsonify({"message": "Complaint updated","complaintid": id})
 
-
 # Delete complaint
 @app.route("/api/complaints/<int:id>", methods=["DELETE"])
 def delete_complaint(id):
@@ -435,7 +427,6 @@ def delete_complaint(id):
     cursor.close()
     conn.close()
     return jsonify({"message": "Complaint deleted"})
-
 
 # ------------------- Complaint Closure -------------------
 @app.route("/api/complaints/<int:id>/close", methods=["POST"])
@@ -501,10 +492,7 @@ def close_complaint(id):
         cursor.close()
         conn.close()
 
-
-
 # Complaint closure page ,new
-
 #prefilling
 @app.route('/api/complaints/<int:id>', methods=['GET'])
 def get_complaint(id):
@@ -570,7 +558,6 @@ def get_complaint(id):
             complaint["closedate"] = complaint["closedate"].strftime("%Y-%m-%d")
 
         print("Complaint fetched:", complaint)
-
         return jsonify(complaint)
 
     except Exception as e:
@@ -584,7 +571,6 @@ def get_complaint(id):
         conn.close()
 
 # ------------------- Dropdown APIs -------------------
-
 # Get all companies
 @app.route("/companies", methods=["GET"])
 def get_companies():
@@ -595,7 +581,6 @@ def get_companies():
     cursor.close()
     conn.close()
     return jsonify(companies)
-
 
 # Get sites for a company
 @app.route("/companies/<int:customer_id>/sites", methods=["GET"])
@@ -608,7 +593,6 @@ def get_sites(customer_id):
     conn.close()
     return jsonify(sites)
 
-
 # Get machines for a site
 @app.route("/sites/<int:site_id>/machines", methods=["GET"])
 def get_machines(site_id):
@@ -619,8 +603,6 @@ def get_machines(site_id):
     cursor.close()
     conn.close()
     return jsonify(machines)
-
-
 
 # ------------------- FRONTEND ROUTES -------------------
 
@@ -705,3 +687,4 @@ def send_email():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
